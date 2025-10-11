@@ -11,4 +11,4 @@ your_project/
 │   └── strategy3.pth
 └── results/ # for plots and results
 
-We can make as many branches as we want and I think then pushing code to main or testing can be done to see what works or not
+We can make as many branches as we want and I think the cleanest would be to push the code to testing or main
