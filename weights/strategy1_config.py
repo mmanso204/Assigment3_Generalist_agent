@@ -1,7 +1,7 @@
 import numpy as np
 
 strategy1_config = {
-    'name': 'some name',
+    'name': 'multi_agent',
     'pole_lengths': np.linspace(0.4, 1.8, 15),  
     'pole_order': 'random',  
     'reward_function': 'standard', 
