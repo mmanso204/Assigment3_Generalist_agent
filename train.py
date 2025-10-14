@@ -28,11 +28,22 @@ def get_pole_sequence(config):
 
 
 def select_pole_length(episode, pole_lengths, config):
-    pass
+    """Pick a pole length for this episode based on the strategy."""
+    order = config.get('pole_order', 'random')
 
+    # Ensure we can sample even if pole_lengths is a numpy array
+    pls = list(pole_lengths)
 
-def apply_reward_function(state, reward, done, config):
-    pass
+    if order == 'random':
+        return float(random.choice(pls))
+    elif order == 'sequential':
+        return float(pls[episode % len(pls)])
+    elif order == 'curriculum_short_to_long':
+        idx = min(episode, len(pls) - 1)
+        return float(pls[idx])
+    else:
+        # fallback
+        return float(random.choice(pls))
 
 
 def apply_reward_function(state, reward, done, config):
@@ -65,7 +76,12 @@ def train_dqn(config):
     state_dim = 4
     action_dim = 2
 
-    network = QNetwork(state_dim, action_dim)
+    q_network = QNetwork(state_dim, action_dim)
+
+    # Target net init
+    target_network = QNetwork(state_dim, action_dim)
+    target_network.load_state_dict(q_network.state_dict())  
+    target_network.eval()
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
     replay_buffer = deque(maxlen=config['buffer_size'])
@@ -73,8 +89,8 @@ def train_dqn(config):
     epsilon = config['epsilon_start']
 
     #lengths
-
-    max_episodes = config['max_episodes']
+    pole_lengths = config['pole_lengths']
+    max_episodes = config['episodes']
     for episode in range(max_episodes):
 
         pole_length = select_pole_length(episode, pole_lengths, config)
@@ -97,7 +113,7 @@ def train_dqn(config):
 
             #modified_reward = apply_reward_function(state, reward, done, config)
             
-            replay_buffer.append((state, action, reward, next_state, done))
+            replay_buffer.append((state, action, reward, next_state, float(done)))
             state = next_state
             episode_reward += reward
             
@@ -106,6 +122,9 @@ def train_dqn(config):
         
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
 
+        # Every N episodes, copy online network weights to target network for stability
+        if (episode + 1) % config['target_update'] == 0:
+            target_network.load_state_dict(q_network.state_dict())  # θ^- ← θ
 
         if episode % 50 == 0:
                 print(f"Episode {episode}, Reward: {episode_reward}, Epsilon: {epsilon:.3f}")
