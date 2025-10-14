@@ -1,6 +1,6 @@
-from strategy1_config import strategy1_config
-from strategy2_config import strategy2_config
-from strategy3_config import strategy3_config
+from weights.strategy1_config import strategy1_config
+from weights.strategy2_config import strategy2_config
+from weights.strategy3_config import strategy3_config
 
 import gym
 import torch
