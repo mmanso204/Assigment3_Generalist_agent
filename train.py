@@ -1,6 +1,6 @@
-from strategy1_config import strategy1_config
-from strategy2_config import strategy2_config
-from strategy3_config import strategy3_config
+from weights.strategy1_config import strategy1_config
+from weights.strategy2_config import strategy2_config
+from weights.strategy3_config import strategy3_config
 
 import math
 import numpy as np
@@ -46,8 +46,21 @@ def apply_reward_function(state, reward, done, config):
 
 def train_step(q_network, target_network, replay_buffer, optimizer, config):
     """Single training step using experience replay"""
-    batch = random.sample(replay_buffer, config['batch_size'])
-    
+    if config['name'] == "replay_buffer":
+        batch = []
+        if len(replay_buffer[2]) >= config['phase_3_batch_size'] * 1.5:
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'])))
+            batch.extend(random.sample(replay_buffer[1], (config['phase_2_batch_size'])))
+            batch.extend(random.sample(replay_buffer[2], (config['phase_3_batch_size'])))
+        elif len(replay_buffer[1]) >= config['phase_2_batch_size'] * 1.5:
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'] + config['phase_3_batch_size'])))
+            batch.extend(random.sample(replay_buffer[1], (config['phase_2_batch_size'])))
+        else:
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'] + config['phase_2_batch_size'] + config['phase_3_batch_size'])))
+        
+    else:
+        batch = random.sample(replay_buffer, config['batch_size'])
+        
     states = torch.tensor([s[0] for s in batch], dtype=torch.float32)
     actions = torch.tensor([s[1] for s in batch], dtype=torch.long)
     rewards = torch.tensor([s[2] for s in batch], dtype=torch.float32)
@@ -74,7 +87,13 @@ def train_dqn(config):
     q_network = QNetwork(state_dim, action_dim)
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
-    replay_buffer = deque(maxlen=config['buffer_size'])
+    if config['name'] == "replay_buffer":
+        phase_1_buffer = deque(maxlen=config['phase_1_batch_size'])
+        phase_2_buffer = deque(maxlen=config['phase_2_batch_size'])
+        phase_3_buffer = deque(maxlen=config['phase_3_batch_size'])
+        replay_buffer = [phase_1_buffer, phase_2_buffer, phase_3_buffer]
+    else: 
+        replay_buffer = deque(maxlen=config['buffer_size'])
 
     epsilon = config['epsilon_start']
 
@@ -103,12 +122,25 @@ def train_dqn(config):
 
             #modified_reward = apply_reward_function(state, reward, done, config)
             
-            replay_buffer.append((state, action, reward, next_state, done))
+            if config['name'] == "replay_buffer":
+                if reward < 500:        #if the environment is currently in phase 1
+                    replay_buffer[0].append((state, action, reward, next_state, done))
+                elif reward > 1000:     #if the environment is currently in phase 3
+                    replay_buffer[2].append((state, action, reward, next_state, done))
+                else:                   #if the environment is currently in phase 2
+                    replay_buffer[1].append((state, action, reward, next_state, done))
+            else:
+                replay_buffer.append((state, action, reward, next_state, done))
             state = next_state
             episode_reward += reward
             
-            if len(replay_buffer) >= config['batch_size']:
-                train_step(q_network, target_network, replay_buffer, optimizer, config)
+            if config['name'] == "replay_buffer":
+                if len(replay_buffer[0]) >= config['phase_1_batch_size']:
+                    train_step(q_network, target_network, replay_buffer, optimizer, config)
+                
+            else:
+                if len(replay_buffer) >= config['batch_size']:
+                    train_step(q_network, target_network, replay_buffer, optimizer, config)
         
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
 
@@ -120,11 +152,11 @@ def train_dqn(config):
     print(f"Model saved as {config['name']}.pth")
 
 if __name__ == "__main__":
-    print("Training Strategy 1")
-    train_dqn(strategy1_config)
+    #print("Training Strategy 1")
+    #train_dqn(strategy1_config)
     
-    print("\nTraining Strategy 2")
-    train_dqn(strategy2_config)
+    #print("\nTraining Strategy 2")
+    #train_dqn(strategy2_config)
     
     print("\nTraining Strategy 3")
     train_dqn(strategy3_config)

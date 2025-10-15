@@ -1,8 +1,8 @@
 import numpy as np
 strategy3_config = {
-    'name': 'namess',
+    'name': 'replay_buffer',
     'pole_lengths': np.linspace(0.4, 1.8, 15),
-    'pole_order': 'easy_to_hard', 
+    'pole_order': 'random', 
     'reward_function': 'standard',
     'reward_range': None,
     'episodes': 1000,
@@ -11,7 +11,11 @@ strategy3_config = {
     'epsilon_decay': 0.995,
     'learning_rate': 0.001,
     'gamma': 0.99,
-    'batch_size': 64,
-    'buffer_size': 10000,
+    'phase_1_batch_size': 21,
+    'phase_2_batch_size': 21,
+    'phase_3_batch_size': 21,
+    'phase_1_buffer_size': 3333,
+    'phase_2_buffer_size': 3333,
+    'phase_3_buffer_size': 3333,
     'target_update': 10,
 }
