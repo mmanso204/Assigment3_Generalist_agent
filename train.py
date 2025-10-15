@@ -36,7 +36,7 @@ def get_pole_sequence(config):
 def select_pole_length(episode, pole_sequence, config):
     max_episodes = config['episodes']
     sequence_length = len(pole_sequence)
-    index = math.ceil(episode * (sequence_length / max_episodes))
+    index = int(episode * (sequence_length / max_episodes))
     return pole_sequence[index]
 
 
