@@ -71,6 +71,9 @@ def train_dqn(config):
     action_dim = 2
 
     q_network = QNetwork(state_dim, action_dim)
+    target_network = QNetwork(state_dim, action_dim)
+    target_network.load_state_dict(q_network.state_dict())
+    target_network.eval()
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
     replay_buffer = deque(maxlen=config['buffer_size'])
@@ -88,6 +91,7 @@ def train_dqn(config):
         state = env.reset()[0]
         done = False
         episode_reward = 0
+        step_number = 0 
 
         while not done:
 
@@ -108,7 +112,12 @@ def train_dqn(config):
             
             if len(replay_buffer) >= config['batch_size']:
                 train_step(q_network, target_network, replay_buffer, optimizer, config)
-        
+            
+            step_number += 1
+
+            if step_number % 100 == 0: #update target network every 100 steps (number can be changed)
+                target_network.load_state_dict(q_network.state_dict())
+
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
 
 
