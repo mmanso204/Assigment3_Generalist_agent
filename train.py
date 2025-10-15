@@ -2,7 +2,9 @@ from weights.strategy1_config import strategy1_config
 from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
 
-import gym
+import math
+import numpy as np
+import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -24,15 +26,18 @@ class QNetwork(nn.Module):
 
 
 def get_pole_sequence(config):
-    pass
+    lengths = config['pole_lengths'].copy() 
+    if config['pole_order'] == 'random':
+        return np.random.permutation(lengths) #randomize order of pole lengths
+    # if you want another pole sequence, add it here
+    pass 
 
 
-def select_pole_length(episode, pole_lengths, config):
-    pass
-
-
-def apply_reward_function(state, reward, done, config):
-    pass
+def select_pole_length(episode, pole_sequence, config):
+    max_episodes = config['episodes']
+    sequence_length = len(pole_sequence)
+    index = math.ceil(episode * (sequence_length / max_episodes))
+    return pole_sequence[index]
 
 
 def apply_reward_function(state, reward, done, config):
@@ -65,19 +70,19 @@ def train_dqn(config):
     state_dim = 4
     action_dim = 2
 
-    network = QNetwork(state_dim, action_dim)
+    q_network = QNetwork(state_dim, action_dim)
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
     replay_buffer = deque(maxlen=config['buffer_size'])
 
     epsilon = config['epsilon_start']
 
-    #lengths
+    pole_sequence = get_pole_sequence(config)
 
     max_episodes = config['max_episodes']
     for episode in range(max_episodes):
 
-        pole_length = select_pole_length(episode, pole_lengths, config)
+        pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
         
         state = env.reset()[0]
