@@ -11,6 +11,7 @@ import torch.optim as optim
 from weights.strategy1_config import strategy1_config
 from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
+#from weights.strategy4_config import strategy4_config
 
 
 class QNetwork(nn.Module):
@@ -106,7 +107,14 @@ def train_dqn(config):
     target_network.eval()
 
     optimizer = optim.Adam(online_network.parameters(), lr=config['learning_rate'])
-    replay_buffer = deque(maxlen=config['buffer_size'])
+    
+    if config['name'] == "replay_buffer":
+        phase_1_buffer = deque(maxlen=config['phase_1_buffer_size'])
+        phase_2_buffer = deque(maxlen=config['phase_2_buffer_size'])
+        phase_3_buffer = deque(maxlen=config['phase_3_buffer_size'])
+        replay_buffer = [phase_1_buffer, phase_2_buffer, phase_3_buffer]
+    else: 
+        replay_buffer = deque(maxlen=config['buffer_size'])
 
     epsilon = config['epsilon_start']
     pole_sequence = get_pole_sequence(config)
@@ -159,3 +167,4 @@ if __name__ == "__main__":
     train_dqn(strategy1_config)
     train_dqn(strategy2_config)
     train_dqn(strategy3_config)
+    #train_dqn(strategy4_config)
