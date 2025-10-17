@@ -1,15 +1,19 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
 from weights.strategy1_config import strategy1_config
 from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
 
-import math
+import random
+from collections import deque
 import numpy as np
-import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
-from collections import deque
+import gymnasium as gym
+import matplotlib.pyplot as plt
+
 
 
 class QNetwork(nn.Module):
@@ -36,7 +40,7 @@ def get_pole_sequence(config):
 def select_pole_length(episode, pole_sequence, config):
     max_episodes = config['episodes']
     sequence_length = len(pole_sequence)
-    index = math.ceil(episode * (sequence_length / max_episodes))
+    index = int(episode * (sequence_length / max_episodes))
     return pole_sequence[index]
 
 
@@ -91,9 +95,9 @@ def train_dqn(config):
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
     if config['name'] == "replay_buffer":
-        phase_1_buffer = deque(maxlen=config['phase_1_batch_size'])
-        phase_2_buffer = deque(maxlen=config['phase_2_batch_size'])
-        phase_3_buffer = deque(maxlen=config['phase_3_batch_size'])
+        phase_1_buffer = deque(maxlen=config['phase_1_buffer_size'])
+        phase_2_buffer = deque(maxlen=config['phase_2_buffer_size'])
+        phase_3_buffer = deque(maxlen=config['phase_3_buffer_size'])
         replay_buffer = [phase_1_buffer, phase_2_buffer, phase_3_buffer]
     else: 
         replay_buffer = deque(maxlen=config['buffer_size'])
@@ -102,7 +106,12 @@ def train_dqn(config):
 
     pole_sequence = get_pole_sequence(config)
 
-    max_episodes = config['max_episodes']
+    max_episodes = config['episodes']
+    
+    total_steps = 0
+    
+    rewards_per_episode = []
+
     for episode in range(max_episodes):
 
         pole_length = select_pole_length(episode, pole_sequence, config)
@@ -113,6 +122,8 @@ def train_dqn(config):
         episode_reward = 0
         
         step_number = 0 
+
+        reward_total = 0
 
         while not done:
 
@@ -128,9 +139,9 @@ def train_dqn(config):
             #modified_reward = apply_reward_function(state, reward, done, config)
             
             if config['name'] == "replay_buffer":
-                if reward < 500:        #if the environment is currently in phase 1
+                if step_number < 500:        #if the environment is currently in phase 1
                     replay_buffer[0].append((state, action, reward, next_state, done))
-                elif reward > 1000:     #if the environment is currently in phase 3
+                elif step_number > 1000:     #if the environment is currently in phase 3
                     replay_buffer[2].append((state, action, reward, next_state, done))
                 else:                   #if the environment is currently in phase 2
                     replay_buffer[1].append((state, action, reward, next_state, done))
@@ -140,24 +151,33 @@ def train_dqn(config):
             episode_reward += reward
             
             if config['name'] == "replay_buffer":
-                if len(replay_buffer[0]) >= config['phase_1_batch_size']:
+                if len(replay_buffer[0]) >= config['phase_1_batch_size'] + config['phase_2_batch_size'] + config['phase_3_batch_size']:
                     train_step(q_network, target_network, replay_buffer, optimizer, config)
+                else:
+                    print("buffer too small")
                 
             else:
                 if len(replay_buffer) >= config['batch_size']:
                     train_step(q_network, target_network, replay_buffer, optimizer, config)
             
+            reward_total += reward
+            
             step_number += 1
+            total_steps += 1
 
-            if step_number % 100 == 0: #update target network every 100 steps (number can be changed)
+            if total_steps % 1000 == 0: #update target network every 100 steps (number can be changed)
                 target_network.load_state_dict(q_network.state_dict())
         
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
 
+        rewards_per_episode.append(reward_total)
 
         if episode % 50 == 0:
                 print(f"Episode {episode}, Reward: {episode_reward}, Epsilon: {epsilon:.3f}")
     
+    plot = plt.plot(rewards_per_episode)
+    plt.show()
+
     torch.save(q_network.state_dict(), f'weights/{config["name"]}.pth')
     print(f"Model saved as {config['name']}.pth")
 
