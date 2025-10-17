@@ -1,0 +1,21 @@
+import numpy as np
+strategy3_config = {
+    'name': 'replay_buffer',
+    'pole_lengths': np.linspace(0.4, 1.8, 15),
+    'pole_order': 'random', 
+    'reward_function': 'standard',
+    'reward_range': None,
+    'episodes': 1000,
+    'epsilon_start': 1.0,
+    'epsilon_end': 0.01,
+    'epsilon_decay': 0.995,
+    'learning_rate': 0.001,
+    'gamma': 0.99,
+    'phase_1_batch_size': 32,
+    'phase_2_batch_size': 16,
+    'phase_3_batch_size': 16,
+    'phase_1_buffer_size': 6000,
+    'phase_2_buffer_size': 2000,
+    'phase_3_buffer_size': 2000,
+    'target_update': 10,
+}
