@@ -1,10 +1,10 @@
 import numpy as np
 strategy2_config = {
-    'name': 'combined',
+    'name': 'reward_function',
     'pole_lengths': np.linspace(0.4, 1.8, 15),
     'pole_order': 'random',
     'reward_function': 'range_based',  
-    'reward_type': "combined",  
+    'reward_type': "creative",  
     'episodes': 1000,
     'epsilon_start': 1.0,
     'epsilon_end': 0.01,

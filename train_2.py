@@ -28,7 +28,7 @@ class QNetwork(nn.Module):
 
 
 def select_pole_length(episode, pole_lengths, config):
-    order = config.get('pole_order', 'random')
+    order = config["pole_order"]
     pls = list(pole_lengths)
     if order == 'random':
         return float(random.choice(pls))
@@ -181,6 +181,9 @@ def train_dqn(config):
                 if len(replay_buffer) >= config['batch_size']:
                     train_step(online_network, target_network, replay_buffer, optimizer, config)
 
+            if step_number == 1500: #stop agent after 1500 steps to prevent it from reaching steop 15000
+                done = True
+            
             step_number += 1 
 
         # Epsilon decay
@@ -197,8 +200,9 @@ def train_dqn(config):
 
 
 if __name__ == "__main__":
-    train_dqn(strategy4_config)
+    
     train_dqn(strategy1_config)
     train_dqn(strategy2_config)
     train_dqn(strategy3_config)
+    train_dqn(strategy4_config)
     

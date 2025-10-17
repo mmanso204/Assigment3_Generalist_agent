@@ -94,7 +94,7 @@ def test_script():
     all_results = []
 
     # import here your trained neural network
-    trained_nn = 'base.pth'
+    trained_nn = 'combined.pth'
 
     results = {}
     total_score = 0

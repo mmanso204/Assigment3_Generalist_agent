@@ -4,7 +4,6 @@ strategy4_config = {
     'pole_lengths': np.linspace(0.4, 1.8, 15),
     'pole_order': 'random', 
     'reward_function': 'standard',
-    'reward_range': None,
     'episodes': 1000,
     'epsilon_start': 1.0,
     'epsilon_end': 0.01,
