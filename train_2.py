@@ -148,8 +148,10 @@ def train_dqn(config):
                 with torch.no_grad():
                     action = online_network(state_tensor).argmax().item()
 
-            next_state, reward, terminated, _, _ = env.step(action)
-            done = terminated 
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            if truncated or terminated:
+                done = True
+            
             modified_reward = apply_reward_function(next_state, reward, done, config)
 
             if config['name'] == "replay_buffer":
