@@ -8,8 +8,9 @@ import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
-from collections import deque
+import gymnasium as gym
+import matplotlib.pyplot as plt
+
 
 
 class QNetwork(nn.Module):
@@ -126,7 +127,13 @@ def train_dqn(config):
     target_network.eval()
 
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
-    replay_buffer = deque(maxlen=config['buffer_size'])
+    if config['name'] == "replay_buffer":
+        phase_1_buffer = deque(maxlen=config['phase_1_buffer_size'])
+        phase_2_buffer = deque(maxlen=config['phase_2_buffer_size'])
+        phase_3_buffer = deque(maxlen=config['phase_3_buffer_size'])
+        replay_buffer = [phase_1_buffer, phase_2_buffer, phase_3_buffer]
+    else: 
+        replay_buffer = deque(maxlen=config['buffer_size'])
 
     epsilon = config['epsilon_start']
 
@@ -145,6 +152,7 @@ def train_dqn(config):
     max_episodes = config['episodes']
     for episode in range(max_episodes):
 
+        pole_length = select_pole_length(episode, pole_sequence, config)
         pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
 

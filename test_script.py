@@ -1,9 +1,12 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
-import gym
+import gymnasium as gym
 from collections import deque
 import os
 import pandas as pd
