@@ -1,10 +1,10 @@
 import numpy as np
 strategy3_config = {
-    'name': 'namess',
+    'name': 'creative',
     'pole_lengths': np.linspace(0.4, 1.8, 15),
-    'pole_order': 'easy_to_hard', 
+    'pole_order': 'random', 
     'reward_function': 'standard',
-    'reward_range': None,
+    'reward_type': "creative",
     'episodes': 1000,
     'epsilon_start': 1.0,
     'epsilon_end': 0.01,

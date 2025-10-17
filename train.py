@@ -23,8 +23,18 @@ class QNetwork(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         return self.fc3(x)
+    
+def get_pole_sequence(config):
+    lengths = config['pole_lengths'].copy() 
+    if config['pole_order'] == 'random':
+        return np.random.permutation(lengths) #randomize order of pole lengths
 
 
+def select_pole_length(episode, pole_sequence, config):
+    max_episodes = config['episodes']
+    sequence_length = len(pole_sequence)
+    index = int(episode * (sequence_length / max_episodes))
+    return pole_sequence[index]
 def get_pole_sequence(config):
     lengths = config['pole_lengths'].copy() 
     if config['pole_order'] == 'random':
@@ -33,7 +43,17 @@ def get_pole_sequence(config):
     else:
         return lengths
 
+def apply_reward_function(state, reward, done, config):
+    if done:
+        return -10  # Strong penalty for failure
 
+    if config.get('reward_type') == 'basic':
+        return reward
+
+    cart_pos, cart_vel, pole_angle, pole_vel = state
+
+    if config.get('reward_type') == 'angle_based':
+        return 1 - abs(pole_angle) / (math.pi / 2)
 def select_pole_length(episode, pole_lengths, config):
     """Pick a pole length for this episode based on the strategy."""
     order = config.get('pole_order', 'random')
@@ -52,38 +72,53 @@ def select_pole_length(episode, pole_lengths, config):
         # fallback
         return float(random.choice(pls))
 
+    if config.get('reward_type') == 'position_based':
+        return 1 - abs(cart_pos) / 2.4
 
-def apply_reward_function(state, reward, done, config):
-    pass
+    if config.get('reward_type') == 'combined':
+        reward_angle = 1 - abs(pole_angle) / (math.pi / 2)
+        reward_position = 1 - abs(cart_pos) / 2.4
+        return 0.7 * reward_angle + 0.3 * reward_position
+
+    if config.get('reward_type') == 'creative':
+        reward_angle = 1 - abs(pole_angle) / (math.pi / 2)
+        reward_velocity = 1 - min(abs(pole_vel) / 3.0, 1.0)
+        reward_position = 1 - abs(cart_pos) / 2.4
+        return 0.5 * reward_angle + 0.3 * reward_velocity + 0.2 * reward_position
+
+    return reward
+
 
 def train_step(q_network, target_network, replay_buffer, optimizer, config):
-    """Single training step using experience replay"""
     batch = random.sample(replay_buffer, config['batch_size'])
-    
+
     states = torch.tensor([s[0] for s in batch], dtype=torch.float32)
     actions = torch.tensor([s[1] for s in batch], dtype=torch.long)
     rewards = torch.tensor([s[2] for s in batch], dtype=torch.float32)
     next_states = torch.tensor([s[3] for s in batch], dtype=torch.float32)
     dones = torch.tensor([s[4] for s in batch], dtype=torch.float32)
-    
+
     current_q = q_network(states).gather(1, actions.unsqueeze(1)).squeeze()
 
     with torch.no_grad():
         next_q = target_network(next_states).max(1)[0]
         target_q = rewards + config['gamma'] * next_q * (1 - dones)
-    
+
     loss = nn.MSELoss()(current_q, target_q)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
+
 def train_dqn(config):
     env = gym.make('CartPole-v1')
 
-    state_dim = 4
-    action_dim = 2
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
 
     q_network = QNetwork(state_dim, action_dim)
+    target_network = QNetwork(state_dim, action_dim)
+    target_network.load_state_dict(q_network.state_dict())
 
     # Target net init
     target_network = QNetwork(state_dim, action_dim)
@@ -95,6 +130,14 @@ def train_dqn(config):
 
     epsilon = config['epsilon_start']
 
+    pole_sequence = get_pole_sequence(config)
+
+    max_episodes = 500
+
+    print(f"\nStarting training: {config['name']} with reward type: {config.get('reward_type')}\n")
+    print(max_episodes)
+    for episode in range(1, max_episodes + 1):
+
     #lengths
     pole_lengths = config['pole_lengths']
     pole_sequence = get_pole_sequence(config)
@@ -104,31 +147,43 @@ def train_dqn(config):
 
         pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
-        
+
         state = env.reset()[0]
         done = False
         episode_reward = 0
+        step = 0
         step_number = 0 
 
         while not done:
-
+            step += 1
             if random.random() < epsilon:
                 action = env.action_space.sample()
             else:
                 state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
                 with torch.no_grad():
                     action = q_network(state_tensor).argmax().item()
-            
-            next_state, reward, done, _, _ = env.step(action)
 
+            next_state, reward, done, _, _ = env.step(action)
+            modified_reward = apply_reward_function(next_state, reward, done, config)
+
+            replay_buffer.append((state, action, modified_reward, next_state, done))
             #modified_reward = apply_reward_function(state, reward, done, config)
             
             replay_buffer.append((state, action, reward, next_state, float(done)))
             state = next_state
-            episode_reward += reward
-            
+            episode_reward += modified_reward
+
             if len(replay_buffer) >= config['batch_size']:
                 train_step(q_network, target_network, replay_buffer, optimizer, config)
+
+        # Decay epsilon
+        epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
+
+        # Update target network every 10 episodes
+        if episode % 10 == 0:
+            target_network.load_state_dict(q_network.state_dict())
+
+        print(f"Episode {episode:4d} | Reward: {episode_reward:6.2f} | Epsilon: {epsilon:.3f} | Steps: {step}")
             
             step_number += 1
 
@@ -141,18 +196,11 @@ def train_dqn(config):
         if (episode + 1) % config['target_update'] == 0:
             target_network.load_state_dict(q_network.state_dict())  # θ^- ← θ
 
-        if episode % 50 == 0:
-                print(f"Episode {episode}, Reward: {episode_reward}, Epsilon: {epsilon:.3f}")
-    
     torch.save(q_network.state_dict(), f'weights/{config["name"]}.pth')
-    print(f"Model saved as {config['name']}.pth")
+    print(f"\nModel saved as weights/{config['name']}.pth")
+
 
 if __name__ == "__main__":
-    print("Training Strategy 1")
     train_dqn(strategy1_config)
-    
-    print("\nTraining Strategy 2")
     train_dqn(strategy2_config)
-    
-    print("\nTraining Strategy 3")
     train_dqn(strategy3_config)
