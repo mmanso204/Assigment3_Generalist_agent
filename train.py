@@ -35,6 +35,13 @@ def select_pole_length(episode, pole_sequence, config):
     sequence_length = len(pole_sequence)
     index = int(episode * (sequence_length / max_episodes))
     return pole_sequence[index]
+def get_pole_sequence(config):
+    lengths = config['pole_lengths'].copy() 
+    if config['pole_order'] == 'random':
+        return np.random.permutation(lengths) #randomize order of pole lengths
+    # if you want another pole sequence, add it here
+    else:
+        return lengths
 
 def apply_reward_function(state, reward, done, config):
     if done:
@@ -47,6 +54,23 @@ def apply_reward_function(state, reward, done, config):
 
     if config.get('reward_type') == 'angle_based':
         return 1 - abs(pole_angle) / (math.pi / 2)
+def select_pole_length(episode, pole_lengths, config):
+    """Pick a pole length for this episode based on the strategy."""
+    order = config.get('pole_order', 'random')
+
+    # Ensure we can sample even if pole_lengths is a numpy array
+    pls = list(pole_lengths)
+
+    if order == 'random':
+        return float(random.choice(pls))
+    elif order == 'sequential':
+        return float(pls[episode % len(pls)])
+    elif order == 'curriculum_short_to_long':
+        idx = min(episode, len(pls) - 1)
+        return float(pls[idx])
+    else:
+        # fallback
+        return float(random.choice(pls))
 
     if config.get('reward_type') == 'position_based':
         return 1 - abs(cart_pos) / 2.4
@@ -96,6 +120,11 @@ def train_dqn(config):
     target_network = QNetwork(state_dim, action_dim)
     target_network.load_state_dict(q_network.state_dict())
 
+    # Target net init
+    target_network = QNetwork(state_dim, action_dim)
+    target_network.load_state_dict(q_network.state_dict())  
+    target_network.eval()
+
     optimizer = optim.Adam(q_network.parameters(), lr=config['learning_rate'])
     replay_buffer = deque(maxlen=config['buffer_size'])
 
@@ -109,6 +138,13 @@ def train_dqn(config):
     print(max_episodes)
     for episode in range(1, max_episodes + 1):
 
+    #lengths
+    pole_lengths = config['pole_lengths']
+    pole_sequence = get_pole_sequence(config)
+
+    max_episodes = config['episodes']
+    for episode in range(max_episodes):
+
         pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
 
@@ -116,6 +152,7 @@ def train_dqn(config):
         done = False
         episode_reward = 0
         step = 0
+        step_number = 0 
 
         while not done:
             step += 1
@@ -130,6 +167,9 @@ def train_dqn(config):
             modified_reward = apply_reward_function(next_state, reward, done, config)
 
             replay_buffer.append((state, action, modified_reward, next_state, done))
+            #modified_reward = apply_reward_function(state, reward, done, config)
+            
+            replay_buffer.append((state, action, reward, next_state, float(done)))
             state = next_state
             episode_reward += modified_reward
 
@@ -144,6 +184,17 @@ def train_dqn(config):
             target_network.load_state_dict(q_network.state_dict())
 
         print(f"Episode {episode:4d} | Reward: {episode_reward:6.2f} | Epsilon: {epsilon:.3f} | Steps: {step}")
+            
+            step_number += 1
+
+            if step_number % 100 == 0: #update target network every 100 steps (number can be changed)
+                target_network.load_state_dict(q_network.state_dict())
+
+        epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
+
+        # Every N episodes, copy online network weights to target network for stability
+        if (episode + 1) % config['target_update'] == 0:
+            target_network.load_state_dict(q_network.state_dict())  # θ^- ← θ
 
     torch.save(q_network.state_dict(), f'weights/{config["name"]}.pth')
     print(f"\nModel saved as weights/{config['name']}.pth")
