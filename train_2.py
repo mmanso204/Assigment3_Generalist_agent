@@ -3,6 +3,7 @@ import random
 from collections import deque
 
 import gymnasium as gym
+from gymnasium.wrappers import TimeLimit
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
 from weights.strategy4_config import strategy4_config
 
+random.seed(37)
 
 class QNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -32,8 +34,6 @@ def select_pole_length(episode, pole_lengths, config):
     pls = list(pole_lengths)
     if order == 'random':
         return float(random.choice(pls))
-    elif order == 'sequential':
-        return float(pls[episode % len(pls)])
     elif order == 'curriculum_short_to_long':
         idx = min(episode, len(pls) - 1)
         return float(pls[idx])
@@ -49,27 +49,18 @@ def get_pole_sequence(config):
 
 
 def apply_reward_function(state, reward, done, config):
-    if done:
-        return -10  # penalty for failure
+    
 
     cart_pos, cart_vel, pole_angle, pole_vel = state
     reward_type = config.get('reward_type', 'basic')
 
     if reward_type == 'basic':
         return reward
-    elif reward_type == 'angle_based':
-        return 1 - abs(pole_angle) / (math.pi / 2)
-    elif reward_type == 'position_based':
-        return 1 - abs(cart_pos) / 2.4
-    elif reward_type == 'combined':
-        reward_angle = 1 - abs(pole_angle) / (math.pi / 2)
-        reward_position = 1 - abs(cart_pos) / 2.4
-        return 0.7 * reward_angle + 0.3 * reward_position
     elif reward_type == 'creative':
         reward_angle = 1 - abs(pole_angle) / (math.pi / 2)
         reward_velocity = 1 - min(abs(pole_vel) / 3.0, 1.0)
         reward_position = 1 - abs(cart_pos) / 2.4
-        return 0.5 * reward_angle + 0.3 * reward_velocity + 0.2 * reward_position
+        return 0.5 * reward_angle + 0.3 * reward_velocity + 0.2 * reward_position  
 
     return reward
 
@@ -90,11 +81,11 @@ def train_step(q_network, target_network, replay_buffer, optimizer, config):
     else:
         batch = random.sample(replay_buffer, config['batch_size'])
 
-    states = torch.tensor([s[0] for s in batch], dtype=torch.float32)
-    actions = torch.tensor([s[1] for s in batch], dtype=torch.long)
-    rewards = torch.tensor([s[2] for s in batch], dtype=torch.float32)
-    next_states = torch.tensor([s[3] for s in batch], dtype=torch.float32)
-    dones = torch.tensor([s[4] for s in batch], dtype=torch.float32)
+    states = torch.from_numpy(np.array([s[0] for s in batch])).float()
+    actions = torch.from_numpy(np.array([s[1] for s in batch])).long()
+    rewards = torch.from_numpy(np.array([s[2] for s in batch])).float()
+    next_states = torch.from_numpy(np.array([s[3] for s in batch])).float()
+    dones = torch.from_numpy(np.array([s[4] for s in batch])).float()
 
     current_q = q_network(states).gather(1, actions.unsqueeze(1)).squeeze()
     with torch.no_grad():
@@ -109,6 +100,7 @@ def train_step(q_network, target_network, replay_buffer, optimizer, config):
 
 def train_dqn(config):
     env = gym.make('CartPole-v1')
+    env = TimeLimit(env, max_episode_steps=1500)
 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -134,17 +126,19 @@ def train_dqn(config):
 
     print(f"\nStarting training: {config['name']} | Reward type: {config.get('reward_type')}")
 
-    step_number = 0
+    steps_avg = 0
 
     for episode in range(config['episodes']):
         pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
 
-        state = env.reset()[0]
+        state = env.reset(seed=37)[0]
         done = False
         episode_reward = 0
         steps = 0
-
+        if steps > 1500:
+            print("oh no")
+    
         while not done:
             steps += 1
             if random.random() < epsilon:
@@ -159,9 +153,9 @@ def train_dqn(config):
             modified_reward = apply_reward_function(next_state, reward, done, config)
 
             if config['name'] == "replay_buffer":
-                if step_number < 500:        #if the environment is currently in phase 1
+                if steps < 500:        #if the environment is currently in phase 1
                     replay_buffer[0].append((state, action, reward, next_state, done))
-                elif step_number > 1000:     #if the environment is currently in phase 3
+                elif steps > 1000:     #if the environment is currently in phase 3
                     replay_buffer[2].append((state, action, reward, next_state, done))
                 else:                   #if the environment is currently in phase 2
                     replay_buffer[1].append((state, action, reward, next_state, done))
@@ -181,10 +175,7 @@ def train_dqn(config):
                 if len(replay_buffer) >= config['batch_size']:
                     train_step(online_network, target_network, replay_buffer, optimizer, config)
 
-            if step_number == 1500: #stop agent after 1500 steps to prevent it from reaching steop 15000
-                done = True
-            
-            step_number += 1 
+        steps_avg += steps    
 
         # Epsilon decay
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
@@ -193,7 +184,9 @@ def train_dqn(config):
         if (episode + 1) % config['target_update'] == 0:
             target_network.load_state_dict(online_network.state_dict())
 
-        print(f"Episode {episode+1:4d} | Reward: {episode_reward:6.2f} | Epsilon: {epsilon:.3f} | Steps: {steps}")
+        if (episode + 1) % 50 == 0:
+            print(f"Episode {episode+1:4d} | Epsilon: {epsilon:.3f} | Average Steps: {steps_avg/50}")
+            steps_avg = 0
 
     torch.save(online_network.state_dict(), f'weights/{config["name"]}.pth')
     print(f"\nModel saved as weights/{config['name']}.pth")
