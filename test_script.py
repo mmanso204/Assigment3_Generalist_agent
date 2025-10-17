@@ -1,9 +1,12 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
-import gym
+import gymnasium as gym
 from collections import deque
 import os
 import pandas as pd
@@ -91,7 +94,7 @@ def test_script():
     all_results = []
 
     # import here your trained neural network
-    trained_nn = 'path_to_your_nn.pth'
+    trained_nn = 'replay_buffer.pth'
 
     results = {}
     total_score = 0
