@@ -75,7 +75,20 @@ def apply_reward_function(state, reward, done, config):
 
 
 def train_step(q_network, target_network, replay_buffer, optimizer, config):
-    batch = random.sample(replay_buffer, config['batch_size'])
+    if config['name'] == "replay_buffer":
+        batch = []
+        if len(replay_buffer[2]) >= config['phase_3_batch_size'] * 1.5: #draws experiences from all 3 phases
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'])))
+            batch.extend(random.sample(replay_buffer[1], (config['phase_2_batch_size'])))
+            batch.extend(random.sample(replay_buffer[2], (config['phase_3_batch_size'])))
+        elif len(replay_buffer[1]) >= config['phase_2_batch_size'] * 1.5: #devotes part of the batch size to train on experiences from phase 2
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'] + config['phase_3_batch_size'])))
+            batch.extend(random.sample(replay_buffer[1], (config['phase_2_batch_size'])))
+        else: #uses full batch size if only in phase 1
+            batch.extend(random.sample(replay_buffer[0], (config['phase_1_batch_size'] + config['phase_2_batch_size'] + config['phase_3_batch_size'])))
+        
+    else:
+        batch = random.sample(replay_buffer, config['batch_size'])
 
     states = torch.tensor([s[0] for s in batch], dtype=torch.float32)
     actions = torch.tensor([s[1] for s in batch], dtype=torch.long)
@@ -121,6 +134,8 @@ def train_dqn(config):
 
     print(f"\nStarting training: {config['name']} | Reward type: {config.get('reward_type')}")
 
+    step_number = 0
+
     for episode in range(config['episodes']):
         pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
@@ -143,12 +158,30 @@ def train_dqn(config):
             done = terminated 
             modified_reward = apply_reward_function(next_state, reward, done, config)
 
-            replay_buffer.append((state, action, modified_reward, next_state, float(done)))
+            if config['name'] == "replay_buffer":
+                if step_number < 500:        #if the environment is currently in phase 1
+                    replay_buffer[0].append((state, action, reward, next_state, done))
+                elif step_number > 1000:     #if the environment is currently in phase 3
+                    replay_buffer[2].append((state, action, reward, next_state, done))
+                else:                   #if the environment is currently in phase 2
+                    replay_buffer[1].append((state, action, reward, next_state, done))
+            else:
+                replay_buffer.append((state, action, modified_reward, next_state, float(done)))
+            
             state = next_state
             episode_reward += modified_reward
+            
+            if config['name'] == "replay_buffer":
+                if len(replay_buffer[0]) >= config['phase_1_batch_size'] + config['phase_2_batch_size'] + config['phase_3_batch_size']:
+                    train_step(online_network, target_network, replay_buffer, optimizer, config)
+                else:
+                    print("buffer too small")
+                
+            else:
+                if len(replay_buffer) >= config['batch_size']:
+                    train_step(online_network, target_network, replay_buffer, optimizer, config)
 
-            if len(replay_buffer) >= config['batch_size']:
-                train_step(online_network, target_network, replay_buffer, optimizer, config)
+            step_number += 1 
 
         # Epsilon decay
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
