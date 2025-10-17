@@ -1,5 +1,5 @@
 import numpy as np
-strategy3_config = {
+strategy4_config = {
     'name': 'replay_buffer',
     'pole_lengths': np.linspace(0.4, 1.8, 15),
     'pole_order': 'random', 

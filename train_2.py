@@ -11,7 +11,7 @@ import torch.optim as optim
 from weights.strategy1_config import strategy1_config
 from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
-#from weights.strategy4_config import strategy4_config
+from weights.strategy4_config import strategy4_config
 
 
 class QNetwork(nn.Module):
@@ -197,7 +197,8 @@ def train_dqn(config):
 
 
 if __name__ == "__main__":
+    train_dqn(strategy4_config)
     train_dqn(strategy1_config)
     train_dqn(strategy2_config)
     train_dqn(strategy3_config)
-    #train_dqn(strategy4_config)
+    
