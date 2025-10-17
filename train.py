@@ -2,7 +2,9 @@ from weights.strategy1_config import strategy1_config
 from weights.strategy2_config import strategy2_config
 from weights.strategy3_config import strategy3_config
 
-import gym
+import math
+import numpy as np
+import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -24,7 +26,11 @@ class QNetwork(nn.Module):
 
 
 def get_pole_sequence(config):
-    pass
+    lengths = config['pole_lengths'].copy() 
+    if config['pole_order'] == 'random':
+        return np.random.permutation(lengths) #randomize order of pole lengths
+    # if you want another pole sequence, add it here
+    pass 
 
 
 def select_pole_length(episode, pole_lengths, config):
@@ -93,12 +99,13 @@ def train_dqn(config):
     max_episodes = config['episodes']
     for episode in range(max_episodes):
 
-        pole_length = select_pole_length(episode, pole_lengths, config)
+        pole_length = select_pole_length(episode, pole_sequence, config)
         env.unwrapped.length = pole_length
         
         state = env.reset()[0]
         done = False
         episode_reward = 0
+        step_number = 0 
 
         while not done:
 
@@ -119,7 +126,12 @@ def train_dqn(config):
             
             if len(replay_buffer) >= config['batch_size']:
                 train_step(q_network, target_network, replay_buffer, optimizer, config)
-        
+            
+            step_number += 1
+
+            if step_number % 100 == 0: #update target network every 100 steps (number can be changed)
+                target_network.load_state_dict(q_network.state_dict())
+
         epsilon = max(config['epsilon_end'], epsilon * config['epsilon_decay'])
 
         # Every N episodes, copy online network weights to target network for stability
