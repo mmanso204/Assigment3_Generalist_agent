@@ -30,7 +30,8 @@ def get_pole_sequence(config):
     if config['pole_order'] == 'random':
         return np.random.permutation(lengths) #randomize order of pole lengths
     # if you want another pole sequence, add it here
-    pass 
+    else:
+        return lengths
 
 
 def select_pole_length(episode, pole_lengths, config):
@@ -96,6 +97,8 @@ def train_dqn(config):
 
     #lengths
     pole_lengths = config['pole_lengths']
+    pole_sequence = get_pole_sequence(config)
+
     max_episodes = config['episodes']
     for episode in range(max_episodes):
 
